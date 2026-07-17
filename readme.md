@@ -11,13 +11,7 @@ Built for the [Hedera x402 Hackathon](https://hedera.com) — implementing the H
 
 ---
 
-## 🎥 Demo
 
-**[▶ Watch the demo video](#)** *(add your video link before submission)*
-
-**Live transaction proof on HashScan:**
-- [Transaction 1](https://hashscan.io/testnet/transaction/0.0.9567368-1784282269-498744589)
-- [Transaction 2](https://hashscan.io/testnet/transaction/0.0.9567368-1784282302-241062366)
 
 ---
 
@@ -88,9 +82,9 @@ The payment gate can't be bypassed by forging a plausible-looking transaction ID
 | AI | GPT-4o-mini (OpenAI-compatible endpoint) |
 | Protocol | x402 (HTTP 402 Payment Required) |
 
----
 
 ## 📁 Project Structure
+```
 pay-per-prompt/
 ├── app/
 │   ├── api/ask/route.ts       # x402 payment gate + AI orchestration
@@ -105,7 +99,7 @@ pay-per-prompt/
 │   ├── hedera.ts                # Payment execution + Mirror Node verification
 │   └── types.ts
 └── .env                         # Hedera + AI provider config (not committed)
----
+```
 
 ## 🚀 Getting Started
 
@@ -171,7 +165,7 @@ Open [http://localhost:3000](http://localhost:3000), ask a question, watch a rea
 - **Standard used:** x402 (HTTP 402 Payment Required)
 - **Network:** Hedera Testnet
 - **Reference architecture:** #1 — agent that pays per query
-- **Real on-chain transactions:** ✅ (see HashScan links above)
+- **Real on-chain transactions**
 
 ---
 
@@ -179,6 +173,3 @@ Open [http://localhost:3000](http://localhost:3000), ask a question, watch a rea
 
 **Kaushal Goud** — [GitHub](https://github.com/KaushalGoud)
 
-## 📄 License
-
-MIT
