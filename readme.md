@@ -13,11 +13,11 @@ Built for the [Hedera x402 Hackathon](https://hedera.com) — implementing the H
 
 ## 🎥 Demo
 
-> **[Watch the demo video →](#)** *(add your video link before submission)*
+**[▶ Watch the demo video](#)** *(add your video link before submission)*
 
 **Live transaction proof on HashScan:**
-- [Transaction 1 →](https://hashscan.io/testnet/transaction/0.0.9567368-1784282269-498744589)
-- [Transaction 2 →](https://hashscan.io/testnet/transaction/0.0.9567368-1784282302-241062366)
+- [Transaction 1](https://hashscan.io/testnet/transaction/0.0.9567368-1784282269-498744589)
+- [Transaction 2](https://hashscan.io/testnet/transaction/0.0.9567368-1784282302-241062366)
 
 ---
 
@@ -25,7 +25,7 @@ Built for the [Hedera x402 Hackathon](https://hedera.com) — implementing the H
 
 AI APIs today force a binary choice: **subscribe monthly, or don't use it at all.**
 
-That model breaks down in a few real, common situations:
+That breaks down in a few real, common situations:
 
 | Scenario | Why it fails today |
 |---|---|
@@ -39,7 +39,7 @@ Hedera's fixed, sub-cent transaction fees (~$0.0001–$0.001) make **genuine per
 
 **PayPerPrompt** gates every AI response behind a real, verified Hedera testnet payment using the **x402 standard** — the HTTP `402 Payment Required` status code, implemented as an actual working payment protocol instead of an unused corner of the HTTP spec.
 
-Every question follows this loop: **ask → get charged → pay on-chain → get verified → get answered.** No account. No subscription. No human in the payment loop.
+Every question follows the same loop: **ask → get charged → pay on-chain → get verified → get answered.** No account. No subscription. No human in the payment loop.
 
 ---
 
@@ -75,7 +75,7 @@ Payment isn't just "transaction submitted" — the server independently confirms
 3. **Status check** — the transaction result is `SUCCESS` on-chain
 4. **Replay protection** — a transaction ID can only unlock one answer, ever
 
-This means the payment gate can't be bypassed by forging a plausible-looking transaction ID — it's checked against Hedera's actual public ledger every time.
+The payment gate can't be bypassed by forging a plausible-looking transaction ID — it's checked against Hedera's actual public ledger every time.
 
 ---
 
@@ -91,21 +91,20 @@ This means the payment gate can't be bypassed by forging a plausible-looking tra
 ---
 
 ## 📁 Project Structure
-
 pay-per-prompt/
 ├── app/
-│   ├── api/ask/route.ts      # x402 payment gate + AI orchestration
-│   ├── page.tsx               # Main layout
+│   ├── api/ask/route.ts       # x402 payment gate + AI orchestration
+│   ├── page.tsx                # Main layout
 │   └── layout.tsx
 ├── components/
-│   ├── ChatInterface.tsx      # Chat UI + status flow
-│   ├── MessageBubble.tsx      # Question/answer bubbles + payment proof
-│   ├── PaymentSidebar.tsx     # Session payment activity feed
+│   ├── ChatInterface.tsx       # Chat UI + status flow
+│   ├── MessageBubble.tsx       # Question/answer bubbles + payment proof
+│   ├── PaymentSidebar.tsx      # Session payment activity feed
 │   └── PaymentTransactionItem.tsx
 ├── lib/
-│   ├── hedera.ts               # Payment execution + Mirror Node verification
+│   ├── hedera.ts                # Payment execution + Mirror Node verification
 │   └── types.ts
-└── .env                        # Hedera + AI provider config (not committed)
+└── .env                         # Hedera + AI provider config (not committed)
 ---
 
 ## 🚀 Getting Started
@@ -154,13 +153,13 @@ Open [http://localhost:3000](http://localhost:3000), ask a question, watch a rea
 
 - `.env` is gitignored — never commit real private keys
 - This demo uses a server-held payer key for simplicity; a production version would route payment authorization through the end user's own wallet (e.g. HashPack via HashConnect) rather than a server-side key
-- Payment verification is done server-side against the Mirror Node, never trusted from client input alone
+- Payment verification is always done server-side against the Mirror Node, never trusted from client input alone
 
 ---
 
 ## 🗺️ Roadmap
 
-- [ ] User-side wallet connect (HashPack / HashConnect) instead of server-held payer key
+- [ ] User-side wallet connect (HashPack / HashConnect) instead of a server-held payer key
 - [ ] Support USDC stablecoin payments alongside HBAR
 - [ ] Per-model dynamic pricing (charge more for larger models)
 - [ ] Public shared payment ledger view
