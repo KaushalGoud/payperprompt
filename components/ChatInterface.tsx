@@ -33,23 +33,6 @@ export function ChatInterface({ messages, onNewMessage }: ChatInterfaceProps) {
     scrollToBottom();
   }, [messages, currentStatus]);
 
-  useEffect(() => {
-    if (!isLoading) return;
-
-    const interval = setInterval(() => {
-      setStatusIndex((prev) => {
-        const next = prev + 1;
-        if (next < STATUS_STEPS.length) {
-          setCurrentStatus(STATUS_STEPS[next].step);
-          return next;
-        }
-        return prev;
-      });
-    }, 1200);
-
-    return () => clearInterval(interval);
-  }, [isLoading]);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
@@ -63,22 +46,51 @@ export function ChatInterface({ messages, onNewMessage }: ChatInterfaceProps) {
 
     onNewMessage(userMessage);
 
-    // Reset form
     setInput("");
     setIsLoading(true);
     setStatusIndex(0);
-    setCurrentStatus(STATUS_STEPS[0].step);
+    setCurrentStatus("sending");
 
     try {
-      const response = await fetch("/api/ask", {
+      // Step 1: ask without payment — expect a 402 challenge
+      const challengeRes = await fetch("/api/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question: userMessage.content }),
       });
 
-      const data = await response.json();
+      if (challengeRes.status !== 402) {
+        const data = await challengeRes.json();
+        throw new Error(data.error || "Expected a payment challenge.");
+      }
 
-      if (!response.ok) {
+      const challenge = await challengeRes.json();
+      const requirements = challenge.accepts[0];
+
+      setCurrentStatus("paying");
+
+      // Step 2: sign the payment client-side
+      const { createSignedPayment } = await import("@/lib/client-wallet");
+      const paymentPayload = await createSignedPayment(requirements);
+      const encodedPayment = Buffer.from(
+        JSON.stringify(paymentPayload),
+      ).toString("base64");
+
+      setCurrentStatus("generating");
+
+      // Step 3: retry with the signed payment attached
+      const finalRes = await fetch("/api/ask", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-PAYMENT": encodedPayment,
+        },
+        body: JSON.stringify({ question: userMessage.content }),
+      });
+
+      const data = await finalRes.json();
+
+      if (!finalRes.ok) {
         throw new Error(data.error || "Unable to get a response.");
       }
 
@@ -127,7 +139,6 @@ export function ChatInterface({ messages, onNewMessage }: ChatInterfaceProps) {
 
   return (
     <div className="h-full flex flex-col bg-background">
-      {/* Messages Container */}
       <div className="flex-1 overflow-y-auto p-4 lg:p-6 space-y-4">
         {messages.length === 0 && !isLoading && (
           <div className="flex items-center justify-center h-full">
@@ -152,8 +163,8 @@ export function ChatInterface({ messages, onNewMessage }: ChatInterfaceProps) {
               <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
                 <Loader2 className="w-4 h-4 animate-spin text-accent" />
                 <span>
-                  {STATUS_STEPS[statusIndex]?.label ||
-                    STATUS_STEPS[STATUS_STEPS.length - 1].label}
+                  {STATUS_STEPS.find((s) => s.step === currentStatus)?.label ??
+                    "Working..."}
                 </span>
               </div>
             </div>
@@ -163,7 +174,6 @@ export function ChatInterface({ messages, onNewMessage }: ChatInterfaceProps) {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Container */}
       <div className="p-4 lg:p-6 border-t border-border/30 bg-secondary/50">
         <form onSubmit={handleSubmit} className="flex gap-2">
           <input

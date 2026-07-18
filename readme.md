@@ -1,19 +1,15 @@
 # ⚡ PayPerPrompt
 
-**Pay-per-question AI, settled on Hedera.** No subscriptions. No API keys to manage. No credit card. Every answer costs a fraction of a cent, paid on-chain, verified before you get a response.
+**Pay-per-question AI, settled on Hedera — implementing the real x402 protocol.** No subscriptions. No stored API keys. No credit card. Every answer is unlocked by a client-signed, on-chain HBAR payment, verified and settled by the server before you get a response.
 
-Built for the [Hedera x402 Hackathon](https://hedera.com) — implementing the HTTP `402 Payment Required` standard as a real, working payment protocol on Hedera testnet.
+Built for the [Hedera x402 Hackathon](https://hedera.com) — this implements the actual [x402 specification](https://github.com/coinbase/x402) message formats and verify/settle flow, not just the HTTP 402 status code in isolation.
 
 [![Hedera](https://img.shields.io/badge/Hedera-Testnet-8A2BE2)](https://hedera.com)
 [![x402](https://img.shields.io/badge/Standard-x402-blue)](https://github.com/coinbase/x402)
 [![Next.js](https://img.shields.io/badge/Next.js-14-black)](https://nextjs.org)
 [![License](https://img.shields.io/badge/License-MIT-green)](./LICENSE)
 
----
 
-
-
----
 
 ## 🧩 The Problem
 
@@ -31,9 +27,18 @@ Hedera's fixed, sub-cent transaction fees (~$0.0001–$0.001) make **genuine per
 
 ## 💡 The Solution
 
-**PayPerPrompt** gates every AI response behind a real, verified Hedera testnet payment using the **x402 standard** — the HTTP `402 Payment Required` status code, implemented as an actual working payment protocol instead of an unused corner of the HTTP spec.
+**PayPerPrompt** implements the **x402 protocol** — an emerging open standard that activates HTTP's long-dormant `402 Payment Required` status code into a real, working payment flow — adapted to Hedera as a payment network.
 
-Every question follows the same loop: **ask → get charged → pay on-chain → get verified → get answered.** No account. No subscription. No human in the payment loop.
+Unlike a simplified "pay first, send a receipt" approach, this project follows the actual x402 message flow:
+
+1. Client requests a resource with no payment attached
+2. Server responds `402 Payment Required` with a `PAYMENT-REQUIRED` header describing exactly what payment it will accept (`PaymentRequirements`: scheme, network, asset, amount, recipient)
+3. Client constructs and **signs** a matching Hedera transaction — without broadcasting it — and sends it back as an `X-PAYMENT` header (`PaymentPayload`)
+4. Server **verifies** the payload matches the requirements (correct recipient, correct amount, well-formed transaction) without touching the chain yet
+5. Server **settles** the payment by broadcasting the already-signed transaction to Hedera
+6. Only after settlement succeeds does the server generate and return the AI answer, along with a `X-PAYMENT-RESPONSE` header carrying the settlement proof
+
+This mirrors exactly how production x402 facilitators work on other chains — verify, then settle, as two distinct steps — just implemented for Hedera, which has no public facilitator today.
 
 ---
 
@@ -42,34 +47,40 @@ Every question follows the same loop: **ask → get charged → pay on-chain →
 ```mermaid
 sequenceDiagram
     participant User
-    participant UI as Next.js UI
-    participant API as /api/ask (Server)
-    participant Hedera as Hedera Testnet
+    participant UI as Next.js UI (client wallet)
+    participant API as /api/ask (resource server)
+    participant Facilitator as Hedera Facilitator (verify/settle)
     participant Mirror as Hedera Mirror Node
     participant AI as AI Provider (GPT-4o-mini)
 
     User->>UI: Types a question
-    UI->>API: POST /api/ask { question }
-    API->>Hedera: Sign & submit HBAR transfer (payer → receiver)
-    Hedera-->>API: Transaction ID
-    API->>Mirror: Verify transaction (amount, recipient, SUCCESS status)
-    Mirror-->>API: Confirmed ✅
-    API->>AI: Forward question (only after payment confirmed)
+    UI->>API: POST /api/ask (no payment)
+    API-->>UI: 402 + PAYMENT-REQUIRED header (PaymentRequirements)
+    UI->>UI: Build & sign HBAR transfer (not yet broadcast)
+    UI->>API: POST /api/ask + X-PAYMENT header (signed PaymentPayload)
+    API->>Facilitator: verifyPaymentPayload()
+    Facilitator-->>API: Valid ✅ (matches amount, recipient)
+    API->>Facilitator: settlePayment()
+    Facilitator->>Mirror: Broadcast signed transaction
+    Mirror-->>Facilitator: SUCCESS + transaction id
+    Facilitator-->>API: Settled ✅
+    API->>AI: Forward question (only after settlement)
     AI-->>API: Generated answer
-    API-->>UI: { answer, paymentAmount, txId, hashscanUrl }
+    API-->>UI: { answer, txId, hashscanUrl } + X-PAYMENT-RESPONSE header
     UI-->>User: Shows answer + payment proof + HashScan link
 ```
 
-### Payment verification detail
+### Why verify/settle as two separate steps matters
 
-Payment isn't just "transaction submitted" — the server independently confirms it against Hedera's public Mirror Node before releasing any AI-generated content:
+Splitting verification from settlement means a malformed or underpaying request is rejected **before** any blockchain broadcast is attempted — cheaper, faster, and matches how real x402 facilitators are built. It also means the resource server (`/api/ask`) never needs to hold a payer's private key: it only ever inspects and relays a transaction the client already signed.
 
-1. **Amount check** — the transfer meets or exceeds the required price
-2. **Recipient check** — funds actually landed in the correct receiver account
-3. **Status check** — the transaction result is `SUCCESS` on-chain
-4. **Replay protection** — a transaction ID can only unlock one answer, ever
+### Payment integrity checks
 
-The payment gate can't be bypassed by forging a plausible-looking transaction ID — it's checked against Hedera's actual public ledger every time.
+- **Recipient check** — the signed transaction's recipient must match the server's required `payTo` account
+- **Amount check** — the transferred amount must meet or exceed `maxAmountRequired`
+- **Structural check** — the payload must decode into a valid, well-formed Hedera `TransferTransaction`
+- **Replay protection** — a settled transaction id can never be reused to unlock a second answer
+- **On-chain confirmation** — settlement isn't considered successful until Hedera's own consensus returns a `SUCCESS` receipt
 
 ---
 
@@ -79,41 +90,49 @@ The payment gate can't be bypassed by forging a plausible-looking transaction ID
 |---|---|
 | Frontend | Next.js 14 (App Router), TypeScript, Tailwind CSS |
 | Payments | Hedera testnet, `@hashgraph/sdk`, Hedera Mirror Node REST API |
+| Protocol | x402 (`PaymentRequirements` / `PaymentPayload` / verify+settle, adapted for Hedera) |
 | AI | GPT-4o-mini (OpenAI-compatible endpoint) |
-| Protocol | x402 (HTTP 402 Payment Required) |
 
+---
 
 ## 📁 Project Structure
+
 ```
 pay-per-prompt/
 ├── app/
-│   ├── api/ask/route.ts       # x402 payment gate + AI orchestration
-│   ├── page.tsx                # Main layout
+│   ├── api/ask/route.ts          # x402 resource server: challenge, verify, settle, AI call
+│   ├── page.tsx                    # Main layout
 │   └── layout.tsx
 ├── components/
-│   ├── ChatInterface.tsx       # Chat UI + status flow
-│   ├── MessageBubble.tsx       # Question/answer bubbles + payment proof
-│   ├── PaymentSidebar.tsx      # Session payment activity feed
+│   ├── ChatInterface.tsx           # Chat UI + real x402 request/sign/retry flow
+│   ├── MessageBubble.tsx           # Question/answer bubbles + payment proof
+│   ├── PaymentSidebar.tsx          # Session payment activity feed
 │   └── PaymentTransactionItem.tsx
 ├── lib/
-│   ├── hedera.ts                # Payment execution + Mirror Node verification
+│   ├── x402.ts                       # x402 protocol types + header encode/decode
+│   ├── hedera-facilitator.ts         # verifyPaymentPayload() + settlePayment()
+│   ├── client-wallet.ts              # Browser-side transaction signing (demo wallet)
 │   └── types.ts
-└── .env                         # Hedera + AI provider config (not committed)
+└── .env                             # Hedera + AI provider config (not committed)
 ```
+
+---
 
 ## 🚀 Getting Started
 
 ### Prerequisites
 
 - Node.js 18+
-- A Hedera testnet account ([get one free](https://portal.hedera.com)) — you'll need **two**: one to pay from, one to receive into
+- Two Hedera testnet accounts ([get one free](https://portal.hedera.com)):
+  - a **client/payer** account (signs payments — stands in for a real wallet)
+  - a **receiver** account (your platform's revenue account)
 - An OpenAI-compatible API key (OpenAI, GitHub Models, or Groq)
 
 ### Setup
 
 ```bash
-git clone https://github.com/KaushalGoud/pay-per-prompt.git
-cd pay-per-prompt
+git clone https://github.com/KaushalGoud/payperprompt.git
+cd payperprompt
 npm install
 ```
 
@@ -125,12 +144,15 @@ OPENAI_API_KEY=your_api_key
 OPENAI_MODEL=gpt-4o-mini
 OPENAI_BASE_URL=https://api.openai.com/v1
 
-# Hedera testnet
-HEDERA_ACCOUNT_ID=0.0.xxxxxxx        # payer account
-HEDERA_PRIVATE_KEY=your_ecdsa_hex_key
-RECEIVER_ACCOUNT_ID=0.0.xxxxxxx      # receiver account
+# Hedera testnet — receiver ("platform") account
+RECEIVER_ACCOUNT_ID=0.0.xxxxxxx
 PRICE_HBAR=0.1
 MIRROR_NODE_URL=https://testnet.mirrornode.hedera.com
+
+# Hedera testnet — client/payer demo wallet (browser-side signing)
+# NOTE: NEXT_PUBLIC_ vars are bundled into the browser — testnet-only, never mainnet.
+NEXT_PUBLIC_HEDERA_CLIENT_ACCOUNT_ID=0.0.xxxxxxx
+NEXT_PUBLIC_HEDERA_CLIENT_PRIVATE_KEY=your_ecdsa_hex_key
 ```
 
 Run it:
@@ -139,22 +161,24 @@ Run it:
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000), ask a question, watch a real HBAR payment happen, get your answer.
+Open [http://localhost:3000](http://localhost:3000), ask a question, and watch the real x402 flow: 402 challenge → client signs → server verifies → server settles on-chain → answer appears with a HashScan link.
 
 ---
 
 ## 🔐 Security Notes
 
 - `.env` is gitignored — never commit real private keys
-- This demo uses a server-held payer key for simplicity; a production version would route payment authorization through the end user's own wallet (e.g. HashPack via HashConnect) rather than a server-side key
-- Payment verification is always done server-side against the Mirror Node, never trusted from client input alone
+- **The client-side signing key is intentionally a demo stand-in.** Because it's exposed via `NEXT_PUBLIC_`, it's visible in the browser bundle — acceptable only because it's a testnet account with no real value. A production version would replace `lib/client-wallet.ts` with a real wallet integration (e.g. HashPack via HashConnect), so the private key never leaves the user's own wallet software.
+- The resource server (`/api/ask`) **never holds a payer's private key** — it only verifies and settles transactions the client has already signed, matching how real x402 facilitators operate.
+- Payment verification and settlement are always performed server-side against Hedera directly — never trusted from client-supplied claims alone.
 
 ---
 
 ## 🗺️ Roadmap
 
-- [ ] User-side wallet connect (HashPack / HashConnect) instead of a server-held payer key
+- [ ] Replace the demo client wallet with real HashPack / HashConnect wallet integration
 - [ ] Support USDC stablecoin payments alongside HBAR
+- [ ] Publish a standalone, reusable Hedera x402 facilitator package (none exist publicly today)
 - [ ] Per-model dynamic pricing (charge more for larger models)
 - [ ] Public shared payment ledger view
 
@@ -162,10 +186,11 @@ Open [http://localhost:3000](http://localhost:3000), ask a question, watch a rea
 
 ## 🏆 Hedera x402 Hackathon Submission
 
-- **Standard used:** x402 (HTTP 402 Payment Required)
+- **Standard used:** x402 — full `PaymentRequirements` / `PaymentPayload` / verify+settle implementation, not just the bare 402 status code
 - **Network:** Hedera Testnet
-- **Reference architecture:** #1 — agent that pays per query
-- **Real on-chain transactions**
+- **Reference architecture:** #1 — an agent that pays per query
+- **Novel contribution:** a working x402 facilitator pattern for Hedera, a network with no public facilitator today
+- **Real on-chain transactions:** ✅ (see HashScan links above)
 
 ---
 
@@ -173,3 +198,6 @@ Open [http://localhost:3000](http://localhost:3000), ask a question, watch a rea
 
 **Kaushal Goud** — [GitHub](https://github.com/KaushalGoud)
 
+## 📄 License
+
+MIT
