@@ -190,8 +190,7 @@ Open [http://localhost:3000](http://localhost:3000), ask a question, and watch t
 - **Network:** Hedera Testnet
 - **Reference architecture:** #1 — an agent that pays per query
 - **Novel contribution:** a working x402 facilitator pattern for Hedera, a network with no public facilitator today
-- **Real on-chain transactions:** ✅ (see HashScan links above)
-
+- **Real on-chain transactions:**
 ---
 
 
