@@ -194,10 +194,5 @@ Open [http://localhost:3000](http://localhost:3000), ask a question, and watch t
 
 ---
 
-## 👤 Author
 
-**Kaushal Goud** — [GitHub](https://github.com/KaushalGoud)
 
-## 📄 License
-
-MIT
